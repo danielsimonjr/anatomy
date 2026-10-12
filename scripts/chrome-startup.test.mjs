@@ -10,7 +10,7 @@ import test from "node:test";
 const execute = promisify(execFile);
 
 for (const name of ["capture", "drive", "turn-check"]) {
-  test(`${name} removes its profile when Chrome exits before startup`, async () => {
+  test(`${name} removes its profile when Chrome exits before startup`, { skip: process.platform === "win32" && "the fake Chrome is a POSIX shell script" }, async () => {
     const directory = await mkdtemp(join(tmpdir(), "anatomy-chrome-startup-"));
     let profile;
     try {

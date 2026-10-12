@@ -49,6 +49,10 @@ All notable changes to Anatomy are recorded here. The format follows [Keep a Cha
 - Write the first readout value even when empty or issued before passive binding.
 - Measure transformed rectangular and round SVG primitives through their true affine bounds.
 - `examples/test-rig/` drew its glass button dark in the light theme. `stretch.css` now has light values for its own colours.
+- The browser scripts start Chrome on Windows. `--headless=new` makes the process that `spawn` returns exit 0 while the browser keeps running, and the `DevTools listening` line never reaches stderr, so every script stopped with `Chrome exited before startup: 0` (measured with Chrome 154, Edge and Playwright Chromium). `scripts/chrome-port.mjs` now reads the port from the `DevToolsActivePort` file in the profile, which every platform writes, and treats exit code 0 as a hand-off. A non-zero exit still fails at once.
+- A script closes the browser it started: `Browser.close` over DevTools, then the profile removal is tried for 4 s, because Windows holds the folder for about a second after the browser exits. Killing the child that `spawn` returned left the real browser and its profile behind.
+- `scripts/turn-check.mjs` finds Chrome on Windows. It had its own copy of the search list with no Windows entry, so it ended with `The "file" argument must be of type string`. The three scripts now share one `chromePath()` in `scripts/chrome-port.mjs`, with the Windows install paths, Playwright's Windows cache and Edge as the last choice.
+- The scripts leave through `process.exitCode` and a short fallback timer. `process.exit` while a socket was closing aborted Node on Windows with `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` and exit code 127.
 
 ### Changed
 

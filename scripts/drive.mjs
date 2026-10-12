@@ -1,7 +1,7 @@
-import { chromePort } from "./chrome-port.mjs";
+import { chromePath, chromePort, leave, stopChrome } from "./chrome-port.mjs";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { LINE_ENDS } from "./line-ends.mjs";
@@ -59,27 +59,6 @@ Fractions are 0..1 across the element.
 Prints the readout after each shot, then console errors and exceptions.`);
 }
 
-function chromePath() {
-  const candidates = [
-    process.env.CHROME_PATH,
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    "/usr/bin/google-chrome",
-    "/usr/bin/google-chrome-stable",
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-  ].filter(Boolean);
-  const playwright = join(homedir(), "Library/Caches/ms-playwright");
-  if (existsSync(playwright)) {
-    for (const dir of readdirSync(playwright).sort().reverse()) {
-      for (const sub of ["chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing", "chrome-mac/Chromium.app/Contents/MacOS/Chromium", "chrome-linux/chrome"]) {
-        candidates.push(join(playwright, dir, sub));
-      }
-    }
-  }
-  return candidates.find((path) => existsSync(path));
-}
 
 async function main() {
   const argv = process.argv.slice(2);
@@ -117,12 +96,9 @@ async function main() {
   const profile = mkdtempSync(join(tmpdir(), "iso-drive-"));
   const chrome = spawn(binary, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "--allow-file-access-from-files", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"]);
   const port = await chromePort(chrome, profile);
-  const finish = (code) => {
-    chrome.kill("SIGKILL");
-    try {
-      rmSync(profile, { recursive: true, force: true });
-    } catch {}
-    process.exit(code);
+  const finish = async (code) => {
+    await stopChrome(chrome, profile, port);
+    leave(code);
   };
   try {
     const page = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json();

@@ -1,7 +1,7 @@
-import { chromePort } from "./chrome-port.mjs";
+import { chromePath, chromePort, leave, stopChrome } from "./chrome-port.mjs";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { LINE_ENDS } from "./line-ends.mjs";
@@ -27,12 +27,6 @@ function usage() {
   The angle is the figure's first turn group (window.__isoTurn.set(θ)).`);
 }
 
-function chromePath() {
-  const candidates = [process.env.CHROME_PATH, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"].filter(Boolean);
-  const playwright = join(homedir(), "Library/Caches/ms-playwright");
-  if (existsSync(playwright)) for (const dir of readdirSync(playwright).sort().reverse()) for (const sub of ["chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing", "chrome-mac/Chromium.app/Contents/MacOS/Chromium", "chrome-linux/chrome"]) candidates.push(join(playwright, dir, sub));
-  return candidates.find((path) => existsSync(path));
-}
 
 async function browser(target, { width, height, scale, throttle, noWebgl }) {
   const profile = mkdtempSync(join(tmpdir(), "turn-check-"));
@@ -72,12 +66,9 @@ async function browser(target, { width, height, scale, throttle, noWebgl }) {
   const url = /^https?:|^file:/.test(target) ? target : pathToFileURL(resolve(target)).href;
   await send("Page.navigate", { url });
   await new Promise((done) => setTimeout(done, 1500));
-  const close = () => {
+  const close = async () => {
     socket.close();
-    chrome.kill("SIGKILL");
-    try {
-      rmSync(profile, { recursive: true, force: true });
-    } catch {}
+    await stopChrome(chrome, profile, port);
   };
   return { send, evaluate, close, problems };
 }
@@ -627,10 +618,10 @@ async function main() {
     console.error(error);
     failed++;
   } finally {
-    page.close();
+    await page.close();
   }
   console.log(failed ? `turn check failed: ${failed}` : "turn check passed");
-  process.exit(failed ? 1 : 0);
+  leave(failed ? 1 : 0);
 }
 
 if (typeof WebSocket === "undefined" && !process.execArgv.includes("--experimental-websocket")) {
